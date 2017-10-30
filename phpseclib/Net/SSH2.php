@@ -2797,8 +2797,8 @@ class SSH2
                     return false;
                 default:
                     if (is_callable($callback)) {
-                        if (call_user_func($callback, $temp) === true) {
-                            $this->_close_channel(self::CHANNEL_EXEC);
+                        if (call_user_func_array($callback, array("host" => $this->host, "data" => $temp)) === true) {
+                            $this->close_channel(self::CHANNEL_EXEC);
                             return true;
                         }
                     } else {
