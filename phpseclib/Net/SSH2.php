@@ -941,7 +941,7 @@ class SSH2
      * @return SSH2|void
      * @access public
      */
-    public function __construct($host, $port = 22, $timeout = 10)
+    public function __construct($host, $port = 22, $timeout = 60*60)
     {
         $this->message_numbers = [
             1 => 'NET_SSH2_MSG_DISCONNECT',
@@ -2809,7 +2809,7 @@ class SSH2
                     return false;
                 default:
                     if (is_callable($callback)) {
-                        if (call_user_func($callback, $temp) === true) {
+                        if (call_user_func_array($callback, array("host" => $this->host, "data" => $temp)) === true) {
                             $this->close_channel(self::CHANNEL_EXEC);
                             return true;
                         }
