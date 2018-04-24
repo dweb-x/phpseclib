@@ -101,7 +101,7 @@ draiRBZruwMPwPIP
         $rsa = new RSA();
         $x509 = new X509();
 
-        $rsa->loadKey('-----BEGIN RSA PRIVATE KEY-----
+        $rsa->load('-----BEGIN RSA PRIVATE KEY-----
 MIICXAIBAAKBgQCqGKukO1De7zhZj6+H0qtjTkVxwTCpvKe4eCZ0FPqri0cb2JZfXJ/DgYSF6vUp
 wmJG8wVQZKjeGcjDOL5UlsuusFncCzWBQ7RKNUSesmQRMSGkVb1/3j+skZ6UtW+5u09lHNsj6tQ5
 1s1SPrCBkedbNf0Tp0GbMJDyR4e9T04ZZwIDAQABAoGAFijko56+qGyN8M0RVyaRAXz++xTqHBLh
@@ -115,7 +115,7 @@ U9VQQSQzY1oZMVX8i1m5WUTLPz2yLJIBQVdXqhMCQBGoiuSoSjafUhV7i1cEGpb88h5NBYZzWXGZ
 37sJ5QsW+sJyoNde3xH8vdXhzU7eT82D6X/scw9RZz+/6rCJ4p0=
 -----END RSA PRIVATE KEY-----');
         $x509->setPrivateKey($rsa);
-        $x509->setDN(array('cn' => 'website.com'));
+        $x509->setDN(['cn' => 'website.com']);
         $x509->saveCSR($x509->signCSR('sha256WithRSAEncryption'), X509::FORMAT_DER);
     }
 }

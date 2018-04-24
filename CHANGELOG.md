@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.0.11 - 2018-04-15
+
+- X509: auto download intermediate certs
+- BigInteger: fix for (new BigInteger(48))->toString(true)) (#1264)
+- ASN1: class is never set as key in _decode_ber
+- check if phpinfo() is available before using (#1256)
+- backport CFB8 support from master to 2.0 (#1257)
+
+## 2.0.10 - 2018-02-08
+
+- BigInteger: fix issue with bitwise_xor (#1245)
+- Crypt: some of the minimum lengths were off
+- SFTP: update stat cache accordingly when file becomes a directory (#1235)
+- SFTP: fix issue with extended attributes on 64-bit PHP installs (#1248)
+- SSH2: more channel handling updates (#1200)
+- X509: use anonymous functions in PHP >= 5.3.0
+- X509: revise logic for validateSignature (#1213)
+- X509: fix 7.2 error when extensions were removed and new ones added (#1243)
+- fix float to int conversions on ARM CPU's (#1220)
+
+## 2.0.9 - 2017-11-29
+
+- 2.0.8 tag was done off of master branch - not 2.0 branch
+
+## 2.0.8 - 2017-11-29
+
+- SSH2: fix issue with key re-exchange
+- SSH2: updates to dealing with extraneous channel packets
+- X509: URL validation didn't work (#1203)
+
 ## 2.0.7 - 2017-10-22
 
 - SSH2:
@@ -62,7 +92,7 @@
 - Random: fix issues with serialize() (#932)
 - RC2: fix issue with decrypting
 - RC4: fix issue with key not being truncated correctly
-- SFTP: nlist() on a non-existant directory resulted in error
+- SFTP: nlist() on a non-existent directory resulted in error
 - SFTP: add is_writable, is_writeable, is_readable
 - X509: add IPv6 support for subjectaltname extension (#936)
 
@@ -85,6 +115,30 @@
 
 - Classes were renamed and namespaced ([#243](https://github.com/phpseclib/phpseclib/issues/243))
 - The use of an autoloader is now required (e.g. Composer)
+
+## 1.0.11 - 2018-04-15
+
+- X509: auto download intermediate certs
+- BigInteger: fix for (new BigInteger(48))->toString(true)) (#1264)
+- ASN1: class is never set as key in _decode_ber
+
+## 1.0.10 - 2018-02-08
+
+- BigInteger: fix issue with bitwise_xor (#1245)
+- Crypt: some of the minimum lengths were off
+- SFTP: update stat cache accordingly when file becomes a directory (#1235)
+- SFTP: fix issue with extended attributes on 64-bit PHP installs (#1248)
+- SSH2: more channel handling updates (#1200)
+- X509: use anonymous functions in PHP >= 5.3.0
+- X509: revise logic for validateSignature (#1213)
+- X509: fix 7.2 error when extensions were removed and new ones added (#1243)
+- fix float to int conversions on ARM CPU's (#1220)
+
+## 1.0.9 - 2017-11-29
+
+- SSH2: fix issue with key re-exchange
+- SSH2: updates to dealing with extraneous channel packets
+- X509: URL validation didn't work (#1203)
 
 ## 1.0.8 - 2017-10-22
 
