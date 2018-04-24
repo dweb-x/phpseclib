@@ -98,7 +98,7 @@ class Stream
     /**
      * Context resource
      *
-     * Technically this needs to be publically accessible so PHP can set it directly
+     * Technically this needs to be publicly accessible so PHP can set it directly
      *
      * @var resource
      * @access public
@@ -626,7 +626,6 @@ class Stream
      * $options. What does 8 correspond to?
      *
      * @param string $path
-     * @param int $mode
      * @param int $options
      * @return bool
      * @access public

@@ -76,7 +76,7 @@ class BigInteger implements \Serializable
      * Throws an exception if the type is invalid
      *
      * @param string $main
-     * @param array $modexp optional
+     * @param array $modexps optional
      */
     public static function setEngine($main, $modexps = ['DefaultEngine'])
     {
@@ -122,7 +122,7 @@ class BigInteger implements \Serializable
      *
      * @param $x integer|BigInteger\Engines\Engine Base-10 number or base-$base number if $base set.
      * @param int $base
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function __construct($x = 0, $base = 10)
     {
@@ -219,7 +219,8 @@ class BigInteger implements \Serializable
     /**
      * Adds two BigIntegers.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $y
+     * @return BigInteger
      */
     public function add(BigInteger $y)
     {
@@ -229,7 +230,8 @@ class BigInteger implements \Serializable
     /**
      * Subtracts two BigIntegers.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $y
+     * @return BigInteger
      */
     function subtract(BigInteger $y)
     {
@@ -239,8 +241,8 @@ class BigInteger implements \Serializable
     /**
      * Multiplies two BigIntegers
      *
-     * @param \phpseclib\Math\BigInteger $x
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $x
+     * @return BigInteger
      */
     public function multiply(BigInteger $x)
     {
@@ -269,8 +271,8 @@ class BigInteger implements \Serializable
      * ?>
      * </code>
      *
-     * @param \phpseclib\Math\BigInteger $y
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $y
+     * @return BigInteger[]
      */
     public function divide(BigInteger $y)
     {
@@ -285,8 +287,8 @@ class BigInteger implements \Serializable
      * Calculates modular inverses.
      *
      * Say you have (30 mod 17 * x mod 17) mod 17 == 1.  x can be found using modular inverses.
-     *
-     * @param \phpseclib\Math\BigInteger $n
+     * @return BigInteger
+     * @param BigInteger $n
      */
     public function modInverse(BigInteger $n)
     {
@@ -297,12 +299,17 @@ class BigInteger implements \Serializable
      * Calculates modular inverses.
      *
      * Say you have (30 mod 17 * x mod 17) mod 17 == 1.  x can be found using modular inverses.
-     *
-     * @param \phpseclib\Math\BigInteger $n
+     * @return BigInteger[]
+     * @param BigInteger $n
      */
     public function extendedGCD(BigInteger $n)
     {
         extract($this->value->extendedGCD($n->value));
+        /**
+         * @var BigInteger $gcd
+         * @var BigInteger $x
+         * @var BigInteger $y
+         */
         return [
             'gcd' => new static($gcd),
             'x' => new static($x),
@@ -315,7 +322,8 @@ class BigInteger implements \Serializable
      *
      * Say you have 693 and 609.  The GCD is 21.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $n
+     * @return BigInteger
      */
     public function gcd(BigInteger $n)
     {
@@ -325,7 +333,7 @@ class BigInteger implements \Serializable
     /**
      * Absolute value.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      * @access public
      */
     public function abs()
@@ -402,7 +410,9 @@ class BigInteger implements \Serializable
     /**
      * Performs modular exponentiation.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $e
+     * @param BigInteger $n
+     * @return BigInteger
      */
     public function powMod(BigInteger $e, BigInteger $n)
     {
@@ -412,7 +422,9 @@ class BigInteger implements \Serializable
     /**
      * Performs modular exponentiation.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $e
+     * @param BigInteger $n
+     * @return BigInteger
      */
     public function modPow(BigInteger $e, BigInteger $n)
     {
@@ -431,7 +443,7 @@ class BigInteger implements \Serializable
      *
      * Note how the same comparison operator is used.  If you want to test for equality, use $x->equals($y).
      *
-     * @param \phpseclib\Math\BigInteger $y
+     * @param BigInteger $y
      * @return int < 0 if $this is less than $y; > 0 if $this is greater than $y, and 0 if they are equal.
      * @access public
      * @see self::equals()
@@ -447,6 +459,7 @@ class BigInteger implements \Serializable
      *
      * If you need to see if one number is greater than or less than another number, use BigInteger::compare()
      *
+     * @param BigInteger $x
      * @return bool
      */
     public function equals(BigInteger $x)
@@ -457,7 +470,7 @@ class BigInteger implements \Serializable
     /**
      * Logical Not
      *
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function bitwise_not()
     {
@@ -467,7 +480,8 @@ class BigInteger implements \Serializable
     /**
      * Logical And
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $x
+     * @return BigInteger
      */
     public function bitwise_and(BigInteger $x)
     {
@@ -477,7 +491,8 @@ class BigInteger implements \Serializable
     /**
      * Logical Or
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $x
+     * @return BigInteger
      */
     public function bitwise_or(BigInteger $x)
     {
@@ -485,9 +500,10 @@ class BigInteger implements \Serializable
     }
 
     /**
-     * Logical Exlusive Or
+     * Logical Exclusive Or
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $x
+     * @return BigInteger
      */
     public function bitwise_xor(BigInteger $x)
     {
@@ -500,7 +516,7 @@ class BigInteger implements \Serializable
      * Shifts BigInteger's by $shift bits, effectively dividing by 2**$shift.
      *
      * @param int $shift
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function bitwise_rightShift($shift)
     {
@@ -513,7 +529,7 @@ class BigInteger implements \Serializable
      * Shifts BigInteger's by $shift bits, effectively multiplying by 2**$shift.
      *
      * @param int $shift
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function bitwise_leftShift($shift)
     {
@@ -526,7 +542,7 @@ class BigInteger implements \Serializable
      * Instead of the top x bits being dropped they're appended to the shifted bit string.
      *
      * @param int $shift
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function bitwise_leftRotate($shift)
     {
@@ -539,7 +555,7 @@ class BigInteger implements \Serializable
      * Instead of the bottom x bits being dropped they're prepended to the shifted bit string.
      *
      * @param int $shift
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function bitwise_rightRotate($shift)
     {
@@ -550,12 +566,15 @@ class BigInteger implements \Serializable
      * Returns the smallest and largest n-bit number
      *
      * @param int $bits
-     * @return array
+     * @return BigInteger[]
      */
     public static function minMaxBits($bits)
     {
         $class = self::$mainEngine;
         extract($class::minMaxBits($bits));
+        /** @var BigInteger $min
+         *  @var BigInteger $max
+         */
         return [
             'min' => new static($min),
             'max' => new static($max)
@@ -588,7 +607,7 @@ class BigInteger implements \Serializable
      * Bit length is equal to $size
      *
      * @param int $size
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public static function random($size)
     {
@@ -602,7 +621,7 @@ class BigInteger implements \Serializable
      * Bit length is equal to $size
      *
      * @param int $size
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public static function randomPrime($size)
     {
@@ -615,7 +634,9 @@ class BigInteger implements \Serializable
      *
      * If there's not a prime within the given range, false will be returned.
      *
-     * @return \phpseclib\Math\BigInteger|false
+     * @param BigInteger $min
+     * @param BigInteger $max
+     * @return false|BigInteger
      */
     public static function randomRangePrime(BigInteger $min, BigInteger $max)
     {
@@ -632,7 +653,9 @@ class BigInteger implements \Serializable
      * BigInteger::randomRange($min, $max)
      * BigInteger::randomRange($max, $min)
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $min
+     * @param BigInteger $max
+     * @return BigInteger
      */
     public static function randomRange(BigInteger $min, BigInteger $max)
     {
@@ -647,7 +670,7 @@ class BigInteger implements \Serializable
      * $t parameter is distributability.  BigInteger::randomPrime() can be distributed across multiple pageloads
      * on a website instead of just one.
      *
-     * @param int $t
+     * @param int|bool $t
      * @return bool
      */
     public function isPrime($t = false)
@@ -661,7 +684,7 @@ class BigInteger implements \Serializable
      * Returns the nth root of a positive biginteger, where n defaults to 2
      *
      * @param int $n optional
-     * @return \phpseclib\Math\BigInteger
+     * @return BigInteger
      */
     public function root($n = 2)
     {
@@ -671,7 +694,8 @@ class BigInteger implements \Serializable
     /**
      * Performs exponentiation.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger $n
+     * @return BigInteger
      */
     public function pow(BigInteger $n)
     {
@@ -681,7 +705,8 @@ class BigInteger implements \Serializable
     /**
      * Return the minimum BigInteger between an arbitrary number of BigIntegers.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger[] $nums
+     * @return BigInteger
      */
     public static function min(BigInteger ...$nums)
     {
@@ -693,7 +718,8 @@ class BigInteger implements \Serializable
     /**
      * Return the maximum BigInteger between an arbitrary number of BigIntegers.
      *
-     * @return \phpseclib\Math\BigInteger
+     * @param BigInteger[] $nums
+     * @return BigInteger
      */
     public static function max(BigInteger ...$nums)
     {
@@ -705,7 +731,9 @@ class BigInteger implements \Serializable
     /**
      * Tests BigInteger to see if it is between two integers, inclusive
      *
-     * @return boolean
+     * @param BigInteger $min
+     * @param BigInteger $max
+     * @return bool
      */
     public function between(BigInteger $min, BigInteger $max)
     {

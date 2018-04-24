@@ -244,6 +244,22 @@ class X509
     private static $oidsLoaded = false;
 
     /**
+     * Recursion Limit
+     *
+     * @var int
+     * @access private
+     */
+    private static $recur_limit = 5;
+
+    /**
+     * URL fetch flag
+     *
+     * @var bool
+     * @access private
+     */
+    private static $disable_url_fetch = false;
+
+    /**
      * Default Constructor.
      *
      * @return \phpseclib\File\X509
@@ -518,11 +534,11 @@ class X509
                 switch ($algorithm) {
                     case 'rsaEncryption':
                         $cert['tbsCertificate']['subjectPublicKeyInfo']['subjectPublicKey']
-                            = Base64::encode("\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $cert['tbsCertificate']['subjectPublicKeyInfo']['subjectPublicKey'])));
+                            = "\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $cert['tbsCertificate']['subjectPublicKeyInfo']['subjectPublicKey']));
                         /* "[For RSA keys] the parameters field MUST have ASN.1 type NULL for this algorithm identifier."
                            -- https://tools.ietf.org/html/rfc3279#section-2.3.1
 
-                           given that and the fact that RSA keys appear ot be the only key type for which the parameters field can be blank,
+                           given that and the fact that RSA keys appear to be the only key type for which the parameters field can be blank,
                            it seems like perhaps the ASN.1 description ought not say the parameters field is OPTIONAL, but whatever.
                          */
                         $cert['tbsCertificate']['subjectPublicKeyInfo']['algorithm']['parameters'] = null;
@@ -1010,30 +1026,32 @@ class X509
         }
 
         if ($names = $this->getExtension('id-ce-subjectAltName')) {
-            foreach ($names as $key => $value) {
-                $value = str_replace(['.', '*'], ['\.', '[^.]*'], $value);
-                switch ($key) {
-                    case 'dNSName':
-                        /* From RFC2818 "HTTP over TLS":
+            foreach ($names as $name) {
+                foreach ($name as $key => $value) {
+                    $value = str_replace(['.', '*'], ['\.', '[^.]*'], $value);
+                    switch ($key) {
+                        case 'dNSName':
+                            /* From RFC2818 "HTTP over TLS":
 
-                           If a subjectAltName extension of type dNSName is present, that MUST
-                           be used as the identity. Otherwise, the (most specific) Common Name
-                           field in the Subject field of the certificate MUST be used. Although
-                           the use of the Common Name is existing practice, it is deprecated and
-                           Certification Authorities are encouraged to use the dNSName instead. */
-                        if (preg_match('#^' . $value . '$#', $components['host'])) {
-                            return true;
-                        }
-                        break;
-                    case 'iPAddress':
-                        /* From RFC2818 "HTTP over TLS":
+                               If a subjectAltName extension of type dNSName is present, that MUST
+                               be used as the identity. Otherwise, the (most specific) Common Name
+                               field in the Subject field of the certificate MUST be used. Although
+                               the use of the Common Name is existing practice, it is deprecated and
+                               Certification Authorities are encouraged to use the dNSName instead. */
+                            if (preg_match('#^' . $value . '$#', $components['host'])) {
+                                return true;
+                            }
+                            break;
+                        case 'iPAddress':
+                            /* From RFC2818 "HTTP over TLS":
 
-                           In some cases, the URI is specified as an IP address rather than a
-                           hostname. In this case, the iPAddress subjectAltName must be present
-                           in the certificate and must exactly match the IP in the URI. */
-                        if (preg_match('#(?:\d{1-3}\.){4}#', $components['host'] . '.') && preg_match('#^' . $value . '$#', $components['host'])) {
-                            return true;
-                        }
+                               In some cases, the URI is specified as an IP address rather than a
+                               hostname. In this case, the iPAddress subjectAltName must be present
+                               in the certificate and must exactly match the IP in the URI. */
+                            if (preg_match('#(?:\d{1-3}\.){4}#', $components['host'] . '.') && preg_match('#^' . $value . '$#', $components['host'])) {
+                                return true;
+                            }
+                    }
                 }
             }
             return false;
@@ -1082,6 +1100,117 @@ class X509
     }
 
     /**
+     * Fetches a URL
+     *
+     * @param string $url
+     * @access private
+     * @return bool|string
+     */
+    private static function fetchURL($url)
+    {
+        if (self::$disable_url_fetch) {
+            return false;
+        }
+
+        $parts = parse_url($url);
+        $data = '';
+        switch ($parts['scheme']) {
+            case 'http':
+                $fsock = @fsockopen($parts['host'], isset($parts['port']) ? $parts['port'] : 80);
+                if (!$fsock) {
+                    return false;
+                }
+                fputs($fsock, "GET $parts[path] HTTP/1.0\r\n");
+                fputs($fsock, "Host: $parts[host]\r\n\r\n");
+                $line = fgets($fsock, 1024);
+                if (strlen($line) < 3) {
+                    return false;
+                }
+                preg_match('#HTTP/1.\d (\d{3})#', $line, $temp);
+                if ($temp[1] != '200') {
+                    return false;
+                }
+
+                // skip the rest of the headers in the http response
+                while (!feof($fsock) && fgets($fsock, 1024) != "\r\n") {
+                }
+
+                while (!feof($fsock)) {
+                    $data.= fread($fsock, 1024);
+                }
+
+                break;
+            //case 'ftp':
+            //case 'ldap':
+            //default:
+        }
+
+        return $data;
+    }
+
+    /**
+     * Validates an intermediate cert as identified via authority info access extension
+     *
+     * See https://tools.ietf.org/html/rfc4325 for more info
+     *
+     * @param bool $caonly
+     * @param int $count
+     * @access private
+     * @return bool
+     */
+    private function testForIntermediate($caonly, $count)
+    {
+        $opts = $this->getExtension('id-pe-authorityInfoAccess');
+        if (!is_array($opts)) {
+            return false;
+        }
+        foreach ($opts as $opt) {
+            if ($opt['accessMethod'] == 'id-ad-caIssuers') {
+                // accessLocation is a GeneralName. GeneralName fields support stuff like email addresses, IP addresses, LDAP,
+                // etc, but we're only supporting URI's. URI's and LDAP are the only thing https://tools.ietf.org/html/rfc4325
+                // discusses
+                if (isset($opt['accessLocation']['uniformResourceIdentifier'])) {
+                    $url = $opt['accessLocation']['uniformResourceIdentifier'];
+                    break;
+                }
+            }
+        }
+
+        if (!isset($url)) {
+            return false;
+        }
+
+        $cert = static::fetchURL($url);
+        if (!is_string($cert)) {
+            return false;
+        }
+
+        $parent = new static();
+        $parent->CAs = $this->CAs;
+        /*
+         "Conforming applications that support HTTP or FTP for accessing
+          certificates MUST be able to accept .cer files and SHOULD be able
+          to accept .p7c files." -- https://tools.ietf.org/html/rfc4325
+
+         A .p7c file is 'a "certs-only" CMS message as specified in RFC 2797"
+
+         These are currently unsupported
+        */
+        if (!is_array($parent->loadX509($cert))) {
+            return false;
+        }
+
+        if (!$parent->validateSignatureCountable($caonly, ++$count)) {
+            return false;
+        }
+
+        $this->CAs[] = $parent->currentCert;
+        //$this->loadCA($cert);
+
+        return true;
+    }
+
+    /**
      * Validate a signature
      *
      * Works on X.509 certs, CSR's and CRL's.
@@ -1098,8 +1227,27 @@ class X509
      */
     public function validateSignature($caonly = true)
     {
+        return $this->validateSignatureCountable($caonly, 0);
+    }
+
+    /**
+     * Validate a signature
+     *
+     * Performs said validation whilst keeping track of how many times validation method is called
+     *
+     * @param bool $caonly
+     * @param int $count
+     * @access private
+     * @return mixed
+     */
+    private function validateSignatureCountable($caonly, $count)
+    {
         if (!is_array($this->currentCert) || !isset($this->signatureSubject)) {
             return null;
+        }
+
+        if ($count == self::$recur_limit) {
+            return false;
         }
 
         /* TODO:
@@ -1118,7 +1266,8 @@ class X509
                         $subjectKeyID = $this->getExtension('id-ce-subjectKeyIdentifier');
                         switch (true) {
                             case !is_array($authorityKey):
-                            case is_array($authorityKey) && isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
+                            case !$subjectKeyID:
+                            case isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
                                 $signingCert = $this->currentCert; // working cert
                         }
                 }
@@ -1135,17 +1284,21 @@ class X509
                                 $subjectKeyID = $this->getExtension('id-ce-subjectKeyIdentifier', $ca);
                                 switch (true) {
                                     case !is_array($authorityKey):
-                                    case is_array($authorityKey) && isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
+                                    case !$subjectKeyID:
+                                    case isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
+                                        if (is_array($authorityKey) && isset($authorityKey['authorityCertSerialNumber']) && !$authorityKey['authorityCertSerialNumber']->equals($ca['tbsCertificate']['serialNumber'])) {
+                                            break 2; // serial mismatch - check other ca
+                                        }
                                         $signingCert = $ca; // working cert
                                         break 3;
                                 }
                         }
                     }
                     if (count($this->CAs) == $i && $caonly) {
-                        return false;
+                        return $this->testForIntermediate($caonly, $count) && $this->validateSignature($caonly);
                     }
                 } elseif (!isset($signingCert) || $caonly) {
-                    return false;
+                    return $this->testForIntermediate($caonly, $count) && $this->validateSignature($caonly);
                 }
                 return $this->validateSignatureHelper(
                     $signingCert['tbsCertificate']['subjectPublicKeyInfo']['algorithm']['algorithm'],
@@ -1181,7 +1334,11 @@ class X509
                                 $subjectKeyID = $this->getExtension('id-ce-subjectKeyIdentifier', $ca);
                                 switch (true) {
                                     case !is_array($authorityKey):
-                                    case is_array($authorityKey) && isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
+                                    case !$subjectKeyID:
+                                    case isset($authorityKey['keyIdentifier']) && $authorityKey['keyIdentifier'] === $subjectKeyID:
+                                        if (is_array($authorityKey) && isset($authorityKey['authorityCertSerialNumber']) && !$authorityKey['authorityCertSerialNumber']->equals($ca['tbsCertificate']['serialNumber'])) {
+                                            break 2; // serial mismatch - check other ca
+                                        }
                                         $signingCert = $ca; // working cert
                                         break 3;
                                 }
@@ -1247,6 +1404,41 @@ class X509
         }
 
         return true;
+    }
+
+    /**
+     * Sets the recursion limit
+     *
+     * When validating a signature it may be necessary to download intermediate certs from URI's.
+     * An intermediate cert that linked to itself would result in an infinite loop so to prevent
+     * that we set a recursion limit. A negative number means that there is no recursion limit.
+     *
+     * @param int $count
+     * @access public
+     */
+    static function setRecurLimit($count)
+    {
+        self::$recur_limit = $count;
+    }
+
+    /**
+     * Prevents URIs from being automatically retrieved
+     *
+     * @access public
+     */
+    static function disableURLFetch()
+    {
+        self::$disable_url_fetch = true;
+    }
+
+    /**
+     * Allows URIs to be automatically retrieved
+     *
+     * @access public
+     */
+    static function enableURLFetch()
+    {
+        self::$disable_url_fetch = false;
     }
 
     /**
@@ -1454,6 +1646,10 @@ class X509
         }
 
         $dn = array_values($dn);
+        // fix for https://bugs.php.net/75433 affecting PHP 7.2
+        if (!isset($dn[0])) {
+            $dn = array_splice($dn, 0, 0);
+        }
     }
 
     /**
@@ -1924,8 +2120,9 @@ class X509
      * Load a Certificate Signing Request
      *
      * @param string $csr
-     * @access public
+     * @param int $mode
      * @return mixed
+     * @access public
      */
     public function loadCSR($csr, $mode = self::FORMAT_AUTO_DETECT)
     {
@@ -2020,7 +2217,7 @@ class X509
                 switch ($algorithm) {
                     case 'rsaEncryption':
                         $csr['certificationRequestInfo']['subjectPKInfo']['subjectPublicKey']
-                            = Base64::encode("\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $csr['certificationRequestInfo']['subjectPKInfo']['subjectPublicKey'])));
+                            = "\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $csr['certificationRequestInfo']['subjectPKInfo']['subjectPublicKey']));
                         $csr['certificationRequestInfo']['subjectPKInfo']['algorithm']['parameters'] = null;
                         $csr['signatureAlgorithm']['parameters'] = null;
                         $csr['certificationRequestInfo']['signature']['parameters'] = null;
@@ -2106,7 +2303,6 @@ class X509
             case 'rsaEncryption':
                 $this->publicKey = new RSA();
                 $this->publicKey->load($key);
-                $this->publicKey->setPublicKey();
                 break;
             default:
                 $this->publicKey = null;
@@ -2141,7 +2337,7 @@ class X509
                 switch ($algorithm) {
                     case 'rsaEncryption':
                         $spkac['publicKeyAndChallenge']['spki']['subjectPublicKey']
-                            = Base64::encode("\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $spkac['publicKeyAndChallenge']['spki']['subjectPublicKey'])));
+                            = "\0" . Base64::decode(preg_replace('#-.+-|[\r\n]#', '', $spkac['publicKeyAndChallenge']['spki']['subjectPublicKey']));
                 }
         }
 
@@ -2162,8 +2358,9 @@ class X509
      * Load a Certificate Revocation List
      *
      * @param string $crl
-     * @access public
+     * @param int $mode
      * @return mixed
+     * @access public
      */
     public function loadCRL($crl, $mode = self::FORMAT_AUTO_DETECT)
     {
@@ -2380,10 +2577,10 @@ class X509
 
             $this->currentCert = [
                 'tbsCertificate' =>
-                    array(
+                    [
                         'version' => 'v3',
-                        'serialNumber' => $serialNumber, // $this->setserialNumber()
-                        'signature' => array('algorithm' => $signatureAlgorithm),
+                        'serialNumber' => $serialNumber, // $this->setSerialNumber()
+                        'signature' => ['algorithm' => $signatureAlgorithm],
                         'issuer' => false, // this is going to be overwritten later
                         'validity' => [
                             'notBefore' => $this->timeField($startDate), // $this->setStartDate()
@@ -2391,7 +2588,7 @@ class X509
                         ],
                         'subject' => $subject->dn,
                         'subjectPublicKeyInfo' => $subjectPublicKey
-                    ),
+                    ],
                     'signatureAlgorithm' => ['algorithm' => $signatureAlgorithm],
                     'signature'          => false // this is going to be overwritten later
             ];
@@ -2496,6 +2693,7 @@ class X509
      * Sign a CSR
      *
      * @access public
+     * @param string $signatureAlgorithm
      * @return mixed
      */
     public function signCSR($signatureAlgorithm = 'sha1WithRSAEncryption')
@@ -2554,6 +2752,7 @@ class X509
      * Sign a SPKAC
      *
      * @access public
+     * @param string $signatureAlgorithm
      * @return mixed
      */
     public function signSPKAC($signatureAlgorithm = 'sha1WithRSAEncryption')
@@ -2752,7 +2951,6 @@ class X509
      * X.509 certificate signing helper function.
      *
      * @param object $key
-     * @param \phpseclib\File\X509 $subject
      * @param string $signatureAlgorithm
      * @access public
      * @throws \phpseclib\Exception\UnsupportedAlgorithmException if the algorithm is unsupported
@@ -3030,6 +3228,10 @@ class X509
         }
 
         $extensions = array_values($extensions);
+        // fix for https://bugs.php.net/75433 affecting PHP 7.2
+        if (!isset($extensions[0])) {
+            $extensions = array_splice($extensions, 0, 0);
+        }
         return $result;
     }
 
@@ -3297,7 +3499,7 @@ class X509
      *
      * @param string $id
      * @param mixed $value
-     * @param bool $disposition optional
+     * @param int $disposition optional
      * @access public
      * @return bool
      */
@@ -3462,7 +3664,7 @@ class X509
             // the former is a good example of how to do fuzzing on the public key
             //return new Element(preg_replace('#-.+-|[\r\n]#', '', $this->publicKey->getPublicKey()));
             return [
-                'algorithm' => array('algorithm' => 'rsaEncryption'),
+                'algorithm' => ['algorithm' => 'rsaEncryption'],
                 'subjectPublicKey' => $this->publicKey->getPublicKey('PKCS1')
             ];
         }
@@ -3473,12 +3675,13 @@ class X509
     /**
      * Set the domain name's which the cert is to be valid for
      *
+     * @param $domains[]
      * @access public
      * @return array
      */
-    public function setDomain()
+    public function setDomain(...$domains)
     {
-        $this->domains = func_get_args();
+        $this->domains = $domains;
         $this->removeDNProp('id-at-commonName');
         $this->setDNProp('id-at-commonName', $this->domains[0]);
     }
@@ -3487,11 +3690,11 @@ class X509
      * Set the IP Addresses's which the cert is to be valid for
      *
      * @access public
-     * @param string $ipAddress optional
+     * @param $ipAddresses[] optional
      */
-    public function setIPAddress()
+    public function setIPAddress(...$ipAddresses)
     {
-        $this->ipAddresses = func_get_args();
+        $this->ipAddresses = $ipAddresses;
         /*
         if (!isset($this->domains)) {
             $this->removeDNProp('id-at-commonName');

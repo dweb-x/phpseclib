@@ -493,7 +493,7 @@ abstract class SymmetricKey
     public function __construct($mode)
     {
         $mode = strtolower($mode);
-        // necessary because of 5.6 compatability; we can't do isset(self::MODE_MAP[$mode]) in 5.6
+        // necessary because of 5.6 compatibility; we can't do isset(self::MODE_MAP[$mode]) in 5.6
         $map = self::MODE_MAP;
         if (!isset($map[$mode])) {
             throw new \InvalidArgumentException('No valid mode has been specified');
@@ -650,12 +650,13 @@ abstract class SymmetricKey
      * @see Crypt/Hash.php
      * @param string $password
      * @param string $method
+     * @param $func_args[]
      * @throws \LengthException if pbkdf1 is being used and the derived key length exceeds the hash length
      * @return bool
      * @access public
      * @internal Could, but not must, extend by the child Crypt_* class
      */
-    public function setPassword($password, $method = 'pbkdf2')
+    public function setPassword($password, $method = 'pbkdf2', ...$func_args)
     {
         $key = '';
 
@@ -664,23 +665,21 @@ abstract class SymmetricKey
             case 'pkcs12': // from https://tools.ietf.org/html/rfc7292#appendix-B.2
             case 'pbkdf1':
             case 'pbkdf2':
-                $func_args = func_get_args();
-
                 // Hash function
-                $hash = isset($func_args[2]) ? strtolower($func_args[2]) : 'sha1';
+                $hash = isset($func_args[0]) ? strtolower($func_args[0]) : 'sha1';
                 $hashObj = new Hash();
                 $hashObj->setHash($hash);
 
                 // WPA and WPA2 use the SSID as the salt
-                $salt = isset($func_args[3]) ? $func_args[3] : $this->password_default_salt;
+                $salt = isset($func_args[1]) ? $func_args[1] : $this->password_default_salt;
 
                 // RFC2898#section-4.2 uses 1,000 iterations by default
                 // WPA and WPA2 use 4,096.
-                $count = isset($func_args[4]) ? $func_args[4] : 1000;
+                $count = isset($func_args[2]) ? $func_args[2] : 1000;
 
                 // Keylength
-                if (isset($func_args[5])) {
-                    $dkLen = $func_args[5];
+                if (isset($func_args[3])) {
+                    $dkLen = $func_args[3];
                 } else {
                     $key_length = $this->explicit_key_length !== false ? $this->explicit_key_length : $this->key_length;
                     $dkLen = $method == 'pbkdf1' ? 2 * $key_length : $key_length;
@@ -1505,7 +1504,7 @@ abstract class SymmetricKey
      * PHP's OpenSSL bindings do not operate in continuous mode so we'll wrap around it. Since the keystream
      * for CTR is the same for both encrypting and decrypting this function is re-used by both SymmetricKey::encrypt()
      * and SymmetricKey::decrypt(). Also, OpenSSL doesn't implement CTR for all of it's symmetric ciphers so this
-     * function will emulate CTR with ECB when necesary.
+     * function will emulate CTR with ECB when necessary.
      *
      * @see self::encrypt()
      * @see self::decrypt()
@@ -2188,7 +2187,7 @@ abstract class SymmetricKey
      *
      *     This ensures that _setupInlineCrypt() has always a
      *     full ready2go initializated internal cipher $engine state
-     *     where, for example, the keys allready expanded,
+     *     where, for example, the keys already expanded,
      *     keys/block_size calculated and such.
      *
      *     It is, each time if called, the responsibility of _setupInlineCrypt():
@@ -2739,5 +2738,45 @@ abstract class SymmetricKey
         eval('$func = function ($_action, $_text) { ' . $init_crypt . 'if ($_action == "encrypt") { ' . $encrypt . ' } else { ' . $decrypt . ' }};');
 
         return \Closure::bind($func, $this, static::class);
+    }
+
+    /**
+     * Convert float to int
+     *
+     * On ARM CPUs converting floats to ints doesn't always work
+     *
+     * @access private
+     * @param string $x
+     * @return int
+     */
+    protected static function safe_intval($x)
+    {
+        switch (true) {
+            case is_int($x):
+            // PHP 5.3, per http://php.net/releases/5_3_0.php, introduced "more consistent float rounding"
+            case (php_uname('m') & "\xDF\xDF\xDF") != 'ARM':
+                return $x;
+        }
+        return (fmod($x, 0x80000000) & 0x7FFFFFFF) |
+            ((fmod(floor($x / 0x80000000), 2) & 1) << 31);
+    }
+
+    /**
+     * eval()'able string for in-line float to int
+     *
+     * @access private
+     * @return string
+     */
+    protected static function safe_intval_inline()
+    {
+        switch (true) {
+            case defined('PHP_INT_SIZE') && PHP_INT_SIZE == 8:
+            case (php_uname('m') & "\xDF\xDF\xDF") != 'ARM':
+                return '%s';
+                break;
+            default:
+                $safeint = '(is_int($temp = %s) ? $temp : (fmod($temp, 0x80000000) & 0x7FFFFFFF) | ';
+                return $safeint . '((fmod(floor($temp / 0x80000000), 2) & 1) << 31))';
+        }
     }
 }
